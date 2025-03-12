@@ -1,60 +1,96 @@
-import { useLocalStorage } from './useLocalStorage';
+import { useState, useEffect } from 'react';
 
-// Game state types
 export type GameStatus = 'START' | 'PLAYING' | 'GAME_OVER';
 
-export interface GameState {
+interface GameState {
   status: GameStatus;
   score: number;
   bestScore: number;
   lastScore: number;
+  hasPlayedBefore: boolean;
+  startGame: () => void;
+  endGame: () => void;
+  restartGame: () => void;
+  incrementScore: () => void;
 }
 
-// Default initial state
-const initialGameState: GameState = {
-  status: 'START',
-  score: 0,
-  bestScore: 0,
-  lastScore: 0,
-};
+export function useGameState(): GameState {
+  const [status, setStatus] = useState<GameStatus>('START');
+  const [score, setScore] = useState(0);
+  const [bestScore, setBestScore] = useState(0);
+  const [lastScore, setLastScore] = useState(0);
+  const [hasPlayedBefore, setHasPlayedBefore] = useState(false);
 
-/**
- * Custom hook for managing game state with localStorage persistence
- */
-export function useGameState() {
-  // Use localStorage to persist the best score
-  const [bestScore, setBestScore] = useLocalStorage<number>('flappy-helicopter-best-score', 0);
-  
-  // Use localStorage for the last played score
-  const [lastScore, setLastScore] = useLocalStorage<number>('flappy-helicopter-last-score', 0);
-  
-  // Use localStorage to track if the user has played before
-  const [hasPlayedBefore, setHasPlayedBefore] = useLocalStorage<boolean>('flappy-helicopter-played', false);
+  // Load scores from localStorage on mount
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const storedBestScore = localStorage.getItem('flappyHelicopter_bestScore');
+      const storedLastScore = localStorage.getItem('flappyHelicopter_lastScore');
+      const storedHasPlayed = localStorage.getItem('flappyHelicopter_hasPlayed');
 
-  // Create a function to update the score and check for new best score
-  const updateScore = (newScore: number) => {
-    setLastScore(newScore);
-    
-    if (newScore > bestScore) {
-      setBestScore(newScore);
-      return true; // Return true if it's a new best score
+      if (storedBestScore) {
+        setBestScore(parseInt(storedBestScore, 10));
+      }
+      
+      if (storedLastScore) {
+        setLastScore(parseInt(storedLastScore, 10));
+      }
+      
+      if (storedHasPlayed) {
+        setHasPlayedBefore(storedHasPlayed === 'true');
+      }
     }
+  }, []);
+
+  // Start the game
+  const startGame = () => {
+    setStatus('PLAYING');
+    setScore(0);
+    setHasPlayedBefore(true);
     
-    return false;
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('flappyHelicopter_hasPlayed', 'true');
+    }
   };
 
-  // Mark that the user has played the game
-  const markAsPlayed = () => {
-    if (!hasPlayedBefore) {
-      setHasPlayedBefore(true);
+  // End the game and update scores
+  const endGame = () => {
+    setStatus('GAME_OVER');
+    setLastScore(score);
+    
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('flappyHelicopter_lastScore', score.toString());
     }
+    
+    // Check if this is a new best score
+    if (score > bestScore) {
+      setBestScore(score);
+      
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('flappyHelicopter_bestScore', score.toString());
+      }
+    }
+  };
+
+  // Restart the game (go back to start screen)
+  const restartGame = () => {
+    setStatus('START');
+  };
+
+  // Increment the score
+  const incrementScore = () => {
+    setScore(prevScore => prevScore + 1);
   };
 
   return {
+    status,
+    score,
     bestScore,
     lastScore,
     hasPlayedBefore,
-    updateScore,
-    markAsPlayed,
+    startGame,
+    endGame,
+    restartGame,
+    incrementScore
   };
 }

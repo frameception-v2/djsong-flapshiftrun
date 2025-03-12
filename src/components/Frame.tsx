@@ -8,17 +8,29 @@ import sdk, {
 } from "@farcaster/frame-sdk";
 import { PROJECT_TITLE } from "~/lib/constants";
 import { useGameState, GameStatus } from "~/hooks/useGameState";
+import { useCanvas } from "~/hooks/useCanvas";
 
 export default function Frame() {
   const [isSDKLoaded, setIsSDKLoaded] = useState(false);
   const [context, setContext] = useState<Context.FrameContext>();
   const [added, setAdded] = useState(false);
-  const [gameStatus, setGameStatus] = useState<GameStatus>('START');
-  const [currentScore, setCurrentScore] = useState(0);
   const gameContainerRef = useRef<HTMLDivElement>(null);
   
   // Use our custom game state hook
-  const { bestScore, lastScore, hasPlayedBefore, updateScore, markAsPlayed } = useGameState();
+  const { 
+    status, 
+    score, 
+    bestScore, 
+    lastScore, 
+    hasPlayedBefore, 
+    startGame, 
+    endGame, 
+    restartGame, 
+    incrementScore 
+  } = useGameState();
+  
+  // Use our canvas hook to get the canvas and context
+  const { canvas, context, width, height } = useCanvas(gameContainerRef);
 
   const addFrame = useCallback(async () => {
     try {
@@ -28,24 +40,83 @@ export default function Frame() {
     }
   }, []);
 
-  // Handle game start
-  const handleStartGame = useCallback(() => {
-    setGameStatus('PLAYING');
-    setCurrentScore(0);
-    markAsPlayed();
-  }, [markAsPlayed]);
+  // Basic render function to test canvas
+  const renderCanvas = useCallback(() => {
+    if (!context || !canvas) return;
+    
+    // Clear the canvas
+    context.clearRect(0, 0, width, height);
+    
+    // Draw a simple background
+    context.fillStyle = '#87CEEB';
+    context.fillRect(0, 0, width, height);
+    
+    // If game is in START state, draw a message
+    if (status === 'START') {
+      context.fillStyle = 'white';
+      context.font = '24px Arial';
+      context.textAlign = 'center';
+      context.textBaseline = 'middle';
+      context.fillText(PROJECT_TITLE, width / 2, height / 2 - 20);
+      context.font = '18px Arial';
+      context.fillText('Tap to start', width / 2, height / 2 + 20);
+      
+      if (hasPlayedBefore) {
+        context.font = '16px Arial';
+        context.fillText(`Best Score: ${bestScore}`, width / 2, height / 2 + 60);
+        if (lastScore > 0) {
+          context.fillText(`Last Score: ${lastScore}`, width / 2, height / 2 + 90);
+        }
+      }
+    }
+    
+    // If game is in PLAYING state, draw score
+    if (status === 'PLAYING') {
+      context.fillStyle = 'white';
+      context.font = '24px Arial';
+      context.textAlign = 'right';
+      context.textBaseline = 'top';
+      context.fillText(`Score: ${score}`, width - 20, 20);
+      
+      // Draw a placeholder helicopter
+      context.fillStyle = 'yellow';
+      context.fillRect(width / 4, height / 2, 50, 30);
+    }
+    
+    // If game is in GAME_OVER state, draw game over message
+    if (status === 'GAME_OVER') {
+      // Semi-transparent overlay
+      context.fillStyle = 'rgba(0, 0, 0, 0.7)';
+      context.fillRect(width / 2 - 150, height / 2 - 100, 300, 200);
+      
+      context.fillStyle = 'white';
+      context.font = '28px Arial';
+      context.textAlign = 'center';
+      context.textBaseline = 'middle';
+      context.fillText('Game Over!', width / 2, height / 2 - 50);
+      
+      context.font = '20px Arial';
+      context.fillText(`Score: ${score}`, width / 2, height / 2);
+      
+      context.font = '16px Arial';
+      context.fillText(`Best Score: ${bestScore}`, width / 2, height / 2 + 30);
+      
+      // Draw a button-like shape
+      context.fillStyle = '#4CAF50';
+      context.fillRect(width / 2 - 75, height / 2 + 60, 150, 40);
+      
+      context.fillStyle = 'white';
+      context.font = '16px Arial';
+      context.fillText('Play Again', width / 2, height / 2 + 80);
+    }
+  }, [context, canvas, width, height, status, score, bestScore, lastScore, hasPlayedBefore, PROJECT_TITLE]);
 
-  // Handle game over
-  const handleGameOver = useCallback(() => {
-    setGameStatus('GAME_OVER');
-    const isNewBest = updateScore(currentScore);
-    console.log(`Game over! Score: ${currentScore}, Best: ${bestScore}, New record: ${isNewBest}`);
-  }, [currentScore, bestScore, updateScore]);
-
-  // Handle restart game
-  const handleRestartGame = useCallback(() => {
-    setGameStatus('START');
-  }, []);
+  // Run render on each frame
+  useEffect(() => {
+    if (!context) return;
+    
+    renderCanvas();
+  }, [context, renderCanvas, status, score]);
 
   useEffect(() => {
     const load = async () => {
@@ -88,9 +159,38 @@ export default function Frame() {
     const container = gameContainerRef.current;
     if (!container) return;
 
-    const handleInteraction = () => {
-      if (gameStatus === 'START') {
-        handleStartGame();
+    const handleInteraction = (e: MouseEvent | TouchEvent) => {
+      if (status === 'START') {
+        startGame();
+      } else if (status === 'GAME_OVER') {
+        // Check if click is on the Play Again button
+        if (context && canvas) {
+          const rect = canvas.getBoundingClientRect();
+          const x = e instanceof MouseEvent ? e.clientX : e.touches[0].clientX;
+          const y = e instanceof MouseEvent ? e.clientY : e.touches[0].clientY;
+          
+          // Convert to canvas coordinates
+          const canvasX = x - rect.left;
+          const canvasY = y - rect.top;
+          
+          // Check if click is within button bounds
+          if (
+            canvasX >= width / 2 - 75 &&
+            canvasX <= width / 2 + 75 &&
+            canvasY >= height / 2 + 60 &&
+            canvasY <= height / 2 + 100
+          ) {
+            restartGame();
+          }
+        }
+      } else if (status === 'PLAYING') {
+        // For testing purposes, increment score on tap during gameplay
+        incrementScore();
+        
+        // For testing purposes, end game after score reaches 10
+        if (score >= 9) {
+          endGame();
+        }
       }
     };
 
@@ -101,7 +201,7 @@ export default function Frame() {
       container.removeEventListener('click', handleInteraction);
       container.removeEventListener('touchstart', handleInteraction);
     };
-  }, [gameStatus, handleStartGame]);
+  }, [status, startGame, restartGame, endGame, incrementScore, score, context, canvas, width, height]);
 
   if (!isSDKLoaded) {
     return <div>Loading...</div>;
@@ -135,92 +235,7 @@ export default function Frame() {
           overflow: "hidden",
           touchAction: "none", // Prevent default touch actions
         }}
-      >
-        {gameStatus === 'START' && (
-          <div
-            style={{
-              position: "absolute",
-              top: "50%",
-              left: "50%",
-              transform: "translate(-50%, -50%)",
-              textAlign: "center",
-              color: "white",
-              fontSize: "24px",
-              fontWeight: "bold",
-              textShadow: "2px 2px 4px rgba(0, 0, 0, 0.5)",
-            }}
-          >
-            {PROJECT_TITLE}
-            <div style={{ fontSize: "18px", marginTop: "10px" }}>
-              Tap to start
-            </div>
-            {hasPlayedBefore && (
-              <div style={{ fontSize: "16px", marginTop: "20px" }}>
-                Best Score: {bestScore}
-                {lastScore > 0 && <div>Last Score: {lastScore}</div>}
-              </div>
-            )}
-          </div>
-        )}
-
-        {gameStatus === 'PLAYING' && (
-          <div
-            style={{
-              position: "absolute",
-              top: "20px",
-              right: "20px",
-              color: "white",
-              fontSize: "24px",
-              fontWeight: "bold",
-              textShadow: "2px 2px 4px rgba(0, 0, 0, 0.5)",
-            }}
-          >
-            Score: {currentScore}
-          </div>
-        )}
-
-        {gameStatus === 'GAME_OVER' && (
-          <div
-            style={{
-              position: "absolute",
-              top: "50%",
-              left: "50%",
-              transform: "translate(-50%, -50%)",
-              textAlign: "center",
-              color: "white",
-              fontSize: "28px",
-              fontWeight: "bold",
-              textShadow: "2px 2px 4px rgba(0, 0, 0, 0.5)",
-              backgroundColor: "rgba(0, 0, 0, 0.7)",
-              padding: "20px",
-              borderRadius: "10px",
-            }}
-          >
-            Game Over!
-            <div style={{ fontSize: "20px", marginTop: "10px" }}>
-              Score: {currentScore}
-            </div>
-            <div style={{ fontSize: "16px", marginTop: "5px" }}>
-              Best Score: {bestScore}
-            </div>
-            <button
-              onClick={handleRestartGame}
-              style={{
-                marginTop: "20px",
-                padding: "10px 20px",
-                backgroundColor: "#4CAF50",
-                color: "white",
-                border: "none",
-                borderRadius: "5px",
-                cursor: "pointer",
-                fontSize: "16px",
-              }}
-            >
-              Play Again
-            </button>
-          </div>
-        )}
-      </div>
+      />
     </div>
   );
 }
