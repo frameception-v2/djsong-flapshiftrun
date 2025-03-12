@@ -68,6 +68,9 @@ export default function Frame() {
   const [obstacles, setObstacles] = useState<Obstacle[]>([]);
   const [collisionDebug, setCollisionDebug] = useState(false);
   
+  // Transaction hash for potential future use
+  const [txHash, setTxHash] = useState<string | null>(null);
+  
   // Use our custom game state hook
   const { 
     status, 
@@ -340,6 +343,63 @@ export default function Frame() {
     ctx.restore();
   }, [isThrusting, getHelicopterHitbox, collisionDebug]);
 
+  // Update obstacles - move them and check if they're off screen
+  const updateObstacles = useCallback((deltaTime: number) => {
+    if (status !== 'PLAYING') return;
+    
+    // Move obstacles based on scroll speed
+    const updatedObstacles = obstacles.map(obstacle => {
+      // Move obstacle left
+      const newX = obstacle.x - BACKGROUND_SCROLL_SPEED * deltaTime;
+      
+      // Check if helicopter has passed this obstacle
+      let passed = obstacle.passed;
+      if (!passed && newX + obstacle.width < heliPosition.x - HELICOPTER_WIDTH / 2) {
+        passed = true;
+        // Increment score when passing an obstacle
+        incrementScore(5);
+      }
+      
+      return {
+        ...obstacle,
+        x: newX,
+        passed
+      };
+    });
+    
+    // Remove obstacles that are off screen
+    const filteredObstacles = updatedObstacles.filter(
+      obstacle => obstacle.x + obstacle.width > 0
+    );
+    
+    // Add new obstacles if needed
+    if (filteredObstacles.length < 3) {
+      // Calculate position for new obstacle
+      const lastObstacleX = filteredObstacles.length > 0
+        ? Math.max(...filteredObstacles.map(o => o.x))
+        : width;
+      
+      // Add a new obstacle
+      const gapHeight = 150; // Height of the gap between pipes
+      const minTopHeight = 50; // Minimum height of top pipe
+      const maxTopHeight = height - GROUND_HEIGHT - gapHeight - 50; // Maximum height of top pipe
+      
+      const topHeight = Math.floor(Math.random() * (maxTopHeight - minTopHeight)) + minTopHeight;
+      const bottomY = topHeight + gapHeight;
+      
+      filteredObstacles.push({
+        x: lastObstacleX + 300, // Space obstacles 300px apart
+        topHeight,
+        bottomY,
+        bottomHeight: height - bottomY,
+        width: 60,
+        passed: false
+      });
+    }
+    
+    setObstacles(filteredObstacles);
+  }, [status, obstacles, width, height, heliPosition, incrementScore]);
+
   // Basic render function to test canvas
   const renderCanvas = useCallback(() => {
     if (!context || !canvas) return;
@@ -522,81 +582,22 @@ export default function Frame() {
     endGame, 
     incrementScore, 
     bgScrollX, 
-    checkObstacleCollisions
+    checkObstacleCollisions,
+    updateObstacles
   ]);
-
-  // Update obstacles - move them and check if they're off screen
-  const updateObstacles = useCallback((deltaTime: number) => {
-    if (status !== 'PLAYING') return;
-    
-    // Move obstacles based on scroll speed
-    const updatedObstacles = obstacles.map(obstacle => {
-      // Move obstacle left
-      const newX = obstacle.x - BACKGROUND_SCROLL_SPEED * deltaTime;
-      
-      // Check if helicopter has passed this obstacle
-      let passed = obstacle.passed;
-      if (!passed && newX + obstacle.width < heliPosition.x - HELICOPTER_WIDTH / 2) {
-        passed = true;
-        // Increment score when passing an obstacle
-        incrementScore(5);
-      }
-      
-      return {
-        ...obstacle,
-        x: newX,
-        passed
-      };
-    });
-    
-    // Remove obstacles that are off screen
-    const filteredObstacles = updatedObstacles.filter(
-      obstacle => obstacle.x + obstacle.width > 0
-    );
-    
-    // Add new obstacles if needed
-    if (filteredObstacles.length < 3) {
-      // Calculate position for new obstacle
-      const lastObstacleX = filteredObstacles.length > 0
-        ? Math.max(...filteredObstacles.map(o => o.x))
-        : width;
-      
-      // Add a new obstacle
-      const gapHeight = 150; // Height of the gap between pipes
-      const minTopHeight = 50; // Minimum height of top pipe
-      const maxTopHeight = height - GROUND_HEIGHT - gapHeight - 50; // Maximum height of top pipe
-      
-      const topHeight = Math.floor(Math.random() * (maxTopHeight - minTopHeight)) + minTopHeight;
-      const bottomY = topHeight + gapHeight;
-      
-      filteredObstacles.push({
-        x: lastObstacleX + 300, // Space obstacles 300px apart
-        topHeight,
-        bottomY,
-        bottomHeight: height - bottomY,
-        width: 60,
-        passed: false
-      });
-    }
-    
-    setObstacles(filteredObstacles);
-  }, [status, obstacles, width, height, heliPosition, incrementScore]);
 
   // Use game loop for animation with proper delta time
   useGameLoop((deltaTime) => {
-    // Convert milliseconds to seconds for physics calculations
-    const dt = deltaTime / 1000;
-    
     // Update background scroll position based on game state
     if (status === 'PLAYING') {
       // Update background scroll position
-      setBgScrollX(prevScrollX => prevScrollX + BACKGROUND_SCROLL_SPEED * dt);
+      setBgScrollX(prevScrollX => prevScrollX + BACKGROUND_SCROLL_SPEED * deltaTime / 1000);
       
       // Update helicopter physics
-      updateHelicopter(dt);
+      updateHelicopter(deltaTime / 1000);
     } else if (status === 'START') {
       // Slow scroll in start screen for visual interest
-      setBgScrollX(prevScrollX => prevScrollX + BACKGROUND_SCROLL_SPEED * 0.2 * dt);
+      setBgScrollX(prevScrollX => prevScrollX + BACKGROUND_SCROLL_SPEED * 0.2 * deltaTime / 1000);
     }
     
     // Render the canvas regardless of game state
@@ -624,7 +625,7 @@ export default function Frame() {
         });
 
         // Signal that the frame is ready
-        sdk.actions.ready({});
+        sdk.actions.ready();
       } catch (error) {
         console.error("Error loading SDK context:", error);
       }
