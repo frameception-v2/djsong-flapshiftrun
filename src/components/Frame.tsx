@@ -162,6 +162,8 @@ export default function Frame() {
 
   // Toggle collision debug mode with 'd' key
   useEffect(() => {
+    if (typeof window === 'undefined') return;
+    
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'd' && process.env.NODE_ENV === 'development') {
         setCollisionDebug(prev => !prev);
@@ -173,6 +175,8 @@ export default function Frame() {
   }, []);
 
   const addFrame = useCallback(async () => {
+    if (!sdk || !sdk.actions) return;
+    
     try {
       await sdk.actions.addFrame();
     } catch (error) {
@@ -547,7 +551,7 @@ export default function Frame() {
 
   // Basic render function to test canvas
   const renderCanvas = useCallback(() => {
-    if (!context || !canvas) return;
+    if (!context || !canvas || !width || !height) return;
     
     // Clear the canvas
     context.clearRect(0, 0, width, height);
@@ -684,7 +688,7 @@ export default function Frame() {
     const newX = heliPosition.x + HORIZONTAL_SPEED * deltaTime;
     
     // Check for collisions with ground or ceiling
-    if (newY > height - GROUND_HEIGHT - HELICOPTER_HEIGHT / 2) {
+    if (height && newY > height - GROUND_HEIGHT - HELICOPTER_HEIGHT / 2) {
       // Hit the ground - game over
       endGame();
       return;
@@ -710,7 +714,7 @@ export default function Frame() {
     
     // Update state
     setHeliPosition({
-      x: newX > width * 0.25 ? width * 0.25 : newX, // Keep helicopter at 1/4 of screen width
+      x: width && newX > width * 0.25 ? width * 0.25 : newX, // Keep helicopter at 1/4 of screen width
       y: newY
     });
     setHeliVelocity(newVelocity);
@@ -747,7 +751,7 @@ export default function Frame() {
     // Update background scroll position based on game state
     if (status === 'PLAYING') {
       // Update background scroll position with game speed
-      setBgScrollX(prevScrollX => prevScrollX + BACKGROUND_SCROLL_SPEED *  gameSpeed * deltaTime / 1000);
+      setBgScrollX(prevScrollX => prev => prevScrollX + BACKGROUND_SCROLL_SPEED * gameSpeed * deltaTime / 1000);
       
       // Update helicopter physics
       updateHelicopter(deltaTime / 1000);
@@ -758,11 +762,18 @@ export default function Frame() {
     
     // Render the canvas regardless of game state
     renderCanvas();
-  }, !!context && !!canvas);
+  }, !!(canvas && context));
 
   useEffect(() => {
+    if (typeof window === 'undefined') return;
+    
     const load = async () => {
       try {
+        if (!sdk || !sdk.context) {
+          console.error("Frame SDK not available");
+          return;
+        }
+        
         const ctx = await sdk.context;
         setContext(ctx);
         setAdded(ctx?.client?.added || false);
@@ -772,16 +783,20 @@ export default function Frame() {
           addFrame();
         }
 
-        sdk.on("frameAdded", () => {
-          setAdded(true);
-        });
+        if (sdk.on) {
+          sdk.on("frameAdded", () => {
+            setAdded(true);
+          });
 
-        sdk.on("frameRemoved", () => {
-          setAdded(false);
-        });
+          sdk.on("frameRemoved", () => {
+            setAdded(false);
+          });
+        }
 
         // Signal that the frame is ready
-        sdk.actions.ready();
+        if (sdk.actions && sdk.actions.ready) {
+          sdk.actions.ready();
+        }
       } catch (error) {
         console.error("Error loading SDK context:", error);
       }
@@ -791,13 +806,17 @@ export default function Frame() {
       setIsSDKLoaded(true);
       load();
       return () => {
-        sdk.removeAllListeners();
+        if (sdk.removeAllListeners) {
+          sdk.removeAllListeners();
+        }
       };
     }
   }, [isSDKLoaded, addFrame]);
 
   // Add click/touch handler to the game container
   useEffect(() => {
+    if (typeof window === 'undefined') return;
+    
     const container = gameContainerRef.current;
     if (!container) return;
 
@@ -806,7 +825,7 @@ export default function Frame() {
         startGame();
       } else if (status === 'GAME_OVER') {
         // Check if click is on the Play Again button
-        if (context && canvas) {
+        if (context && canvas && width && height) {
           const rect = canvas.getBoundingClientRect();
           const x = e instanceof MouseEvent ? e.clientX : e.touches[0].clientX;
           const y = e instanceof MouseEvent ? e.clientY : e.touches[0].clientY;
@@ -839,6 +858,8 @@ export default function Frame() {
 
   // Handle pointer down/up for helicopter thrust
   useEffect(() => {
+    if (typeof window === 'undefined') return;
+    
     const container = gameContainerRef.current;
     if (!container) return;
     
