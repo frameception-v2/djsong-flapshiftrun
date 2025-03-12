@@ -1,65 +1,50 @@
 "use client";
 
-import { useEffect, useCallback, useState } from "react";
+import { useEffect, useCallback, useState, useRef } from "react";
 import sdk, {
   AddFrame,
   SignIn as SignInCore,
   type Context,
 } from "@farcaster/frame-sdk";
-import {
-  Card,
-  CardHeader,
-  CardTitle,
-  CardDescription,
-  CardContent,
-} from "~/components/ui/card";
-
-import { config } from "~/components/providers/WagmiProvider";
-import { truncateAddress } from "~/lib/truncateAddress";
-import { base, optimism } from "wagmi/chains";
-import { useSession } from "next-auth/react";
-import { createStore } from "mipd";
-import { Label } from "~/components/ui/label";
 import { PROJECT_TITLE } from "~/lib/constants";
-
-function ExampleCard() {
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Welcome to the Frame Template</CardTitle>
-        <CardDescription>
-          This is an example card that you can customize or remove
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
-        <Label>Place content in a Card here.</Label>
-      </CardContent>
-    </Card>
-  );
-}
+import { useGameState, GameStatus } from "~/hooks/useGameState";
 
 export default function Frame() {
   const [isSDKLoaded, setIsSDKLoaded] = useState(false);
   const [context, setContext] = useState<Context.FrameContext>();
-
   const [added, setAdded] = useState(false);
-
-  const [addFrameResult, setAddFrameResult] = useState("");
+  const [gameStatus, setGameStatus] = useState<GameStatus>('START');
+  const [currentScore, setCurrentScore] = useState(0);
+  const gameContainerRef = useRef<HTMLDivElement>(null);
+  
+  // Use our custom game state hook
+  const { bestScore, lastScore, hasPlayedBefore, updateScore, markAsPlayed } = useGameState();
 
   const addFrame = useCallback(async () => {
     try {
       await sdk.actions.addFrame();
     } catch (error) {
-      if (error instanceof AddFrame.RejectedByUser) {
-        setAddFrameResult(`Not added: ${error.message}`);
-      }
-
-      if (error instanceof AddFrame.InvalidDomainManifest) {
-        setAddFrameResult(`Not added: ${error.message}`);
-      }
-
-      setAddFrameResult(`Error: ${error}`);
+      console.error("Error adding frame:", error);
     }
+  }, []);
+
+  // Handle game start
+  const handleStartGame = useCallback(() => {
+    setGameStatus('PLAYING');
+    setCurrentScore(0);
+    markAsPlayed();
+  }, [markAsPlayed]);
+
+  // Handle game over
+  const handleGameOver = useCallback(() => {
+    setGameStatus('GAME_OVER');
+    const isNewBest = updateScore(currentScore);
+    console.log(`Game over! Score: ${currentScore}, Best: ${bestScore}, New record: ${isNewBest}`);
+  }, [currentScore, bestScore, updateScore]);
+
+  // Handle restart game
+  const handleRestartGame = useCallback(() => {
+    setGameStatus('START');
   }, []);
 
   useEffect(() => {
@@ -77,44 +62,19 @@ export default function Frame() {
         addFrame();
       }
 
-      sdk.on("frameAdded", ({ notificationDetails }) => {
+      sdk.on("frameAdded", () => {
         setAdded(true);
       });
 
-      sdk.on("frameAddRejected", ({ reason }) => {
-        console.log("frameAddRejected", reason);
-      });
-
       sdk.on("frameRemoved", () => {
-        console.log("frameRemoved");
         setAdded(false);
       });
 
-      sdk.on("notificationsEnabled", ({ notificationDetails }) => {
-        console.log("notificationsEnabled", notificationDetails);
-      });
-      sdk.on("notificationsDisabled", () => {
-        console.log("notificationsDisabled");
-      });
-
-      sdk.on("primaryButtonClicked", () => {
-        console.log("primaryButtonClicked");
-      });
-
-      console.log("Calling ready");
+      // Signal that the frame is ready
       sdk.actions.ready({});
-
-      // Set up a MIPD Store, and request Providers.
-      const store = createStore();
-
-      // Subscribe to the MIPD Store.
-      store.subscribe((providerDetails) => {
-        console.log("PROVIDER DETAILS", providerDetails);
-        // => [EIP6963ProviderDetail, EIP6963ProviderDetail, ...]
-      });
     };
+
     if (sdk && !isSDKLoaded) {
-      console.log("Calling load");
       setIsSDKLoaded(true);
       load();
       return () => {
@@ -122,6 +82,26 @@ export default function Frame() {
       };
     }
   }, [isSDKLoaded, addFrame]);
+
+  // Add click/touch handler to the game container
+  useEffect(() => {
+    const container = gameContainerRef.current;
+    if (!container) return;
+
+    const handleInteraction = () => {
+      if (gameStatus === 'START') {
+        handleStartGame();
+      }
+    };
+
+    container.addEventListener('click', handleInteraction);
+    container.addEventListener('touchstart', handleInteraction);
+
+    return () => {
+      container.removeEventListener('click', handleInteraction);
+      container.removeEventListener('touchstart', handleInteraction);
+    };
+  }, [gameStatus, handleStartGame]);
 
   if (!isSDKLoaded) {
     return <div>Loading...</div>;
@@ -134,10 +114,112 @@ export default function Frame() {
         paddingBottom: context?.client.safeAreaInsets?.bottom ?? 0,
         paddingLeft: context?.client.safeAreaInsets?.left ?? 0,
         paddingRight: context?.client.safeAreaInsets?.right ?? 0,
+        width: "100%",
+        height: "100%",
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        justifyContent: "center",
       }}
     >
-      <div className="w-[300px] mx-auto py-2 px-2">
-        <ExampleCard />
+      <div 
+        ref={gameContainerRef}
+        id="game-container"
+        style={{
+          width: "100%",
+          height: "100%",
+          maxWidth: "500px",
+          maxHeight: "800px",
+          backgroundColor: "#87CEEB", // Sky blue background
+          position: "relative",
+          overflow: "hidden",
+          touchAction: "none", // Prevent default touch actions
+        }}
+      >
+        {gameStatus === 'START' && (
+          <div
+            style={{
+              position: "absolute",
+              top: "50%",
+              left: "50%",
+              transform: "translate(-50%, -50%)",
+              textAlign: "center",
+              color: "white",
+              fontSize: "24px",
+              fontWeight: "bold",
+              textShadow: "2px 2px 4px rgba(0, 0, 0, 0.5)",
+            }}
+          >
+            {PROJECT_TITLE}
+            <div style={{ fontSize: "18px", marginTop: "10px" }}>
+              Tap to start
+            </div>
+            {hasPlayedBefore && (
+              <div style={{ fontSize: "16px", marginTop: "20px" }}>
+                Best Score: {bestScore}
+                {lastScore > 0 && <div>Last Score: {lastScore}</div>}
+              </div>
+            )}
+          </div>
+        )}
+
+        {gameStatus === 'PLAYING' && (
+          <div
+            style={{
+              position: "absolute",
+              top: "20px",
+              right: "20px",
+              color: "white",
+              fontSize: "24px",
+              fontWeight: "bold",
+              textShadow: "2px 2px 4px rgba(0, 0, 0, 0.5)",
+            }}
+          >
+            Score: {currentScore}
+          </div>
+        )}
+
+        {gameStatus === 'GAME_OVER' && (
+          <div
+            style={{
+              position: "absolute",
+              top: "50%",
+              left: "50%",
+              transform: "translate(-50%, -50%)",
+              textAlign: "center",
+              color: "white",
+              fontSize: "28px",
+              fontWeight: "bold",
+              textShadow: "2px 2px 4px rgba(0, 0, 0, 0.5)",
+              backgroundColor: "rgba(0, 0, 0, 0.7)",
+              padding: "20px",
+              borderRadius: "10px",
+            }}
+          >
+            Game Over!
+            <div style={{ fontSize: "20px", marginTop: "10px" }}>
+              Score: {currentScore}
+            </div>
+            <div style={{ fontSize: "16px", marginTop: "5px" }}>
+              Best Score: {bestScore}
+            </div>
+            <button
+              onClick={handleRestartGame}
+              style={{
+                marginTop: "20px",
+                padding: "10px 20px",
+                backgroundColor: "#4CAF50",
+                color: "white",
+                border: "none",
+                borderRadius: "5px",
+                cursor: "pointer",
+                fontSize: "16px",
+              }}
+            >
+              Play Again
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );

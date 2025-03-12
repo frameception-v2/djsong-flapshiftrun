@@ -1,8 +1,8 @@
 Here's the optimized 20-task checklist following your requirements:
 
-- [ ] 1. Create Next.js 14 TS project with Frame SDK v2 (base setup)
-- [ ] 2. Add viewport meta tags and CSS reset in layout.tsx (mobile foundation)
-- [ ] 3. Implement useLocalStorage hooks for score persistence (state foundation)
+- [x] 1. Create Next.js 14 TS project with Frame SDK v2 (base setup)
+- [x] 2. Add viewport meta tags and CSS reset in layout.tsx (mobile foundation)
+- [x] 3. Implement useLocalStorage hooks for score persistence (state foundation)
 - [ ] 4. Create canvas context wrapper in home page (rendering foundation)
 - [ ] 5. Build game state machine with START/PLAYING/GAME_OVER (core logic)
 - [ ] 6. Implement useGameLoop hook with requestAnimationFrame (animation core)
