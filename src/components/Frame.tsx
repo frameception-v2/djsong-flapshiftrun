@@ -23,9 +23,20 @@ const ACCELERATION_FACTOR = 0.85; // smoothing factor for acceleration (0-1)
 const DECELERATION_FACTOR = 0.95; // smoothing factor for deceleration (0-1)
 const TERMINAL_VELOCITY = 800; // absolute maximum velocity
 
-// Helicopter dimensions
-const HELICOPTER_WIDTH = 60;
-const HELICOPTER_HEIGHT = 30;
+// Character configuration
+const ROCKET_EMOJI = '🚀';
+const ROCKET_EMOJI_WIDTH = 40;
+const ROCKET_EMOJI_HEIGHT = 40;
+const DEFAULT_CONFIG = {
+  emoji: ROCKET_EMOJI,
+  color: '#FFD700',
+  size: 40
+};
+export const config = {
+  emoji: ROCKET_EMOJI,
+  color: '#FFD700',
+  size: 40
+};
 
 // Hitbox configuration (slightly smaller than visual size for better gameplay)
 const HITBOX_PADDING = 5; // pixels to reduce hitbox size by
@@ -349,16 +360,16 @@ export default function Frame() {
     ctx.translate(x, y);
     
     // Rotate based on velocity
-    ctx.rotate(rotation * Math.PI / 180);
+    ctx.rotate((rotation * Math.PI / 180) + Math.PI/2); // Add 90deg rotation to point rocket upward
     
-    // Draw helicopter body
-    ctx.fillStyle = '#FFD700'; // Gold color
-    ctx.fillRect(-HELICOPTER_WIDTH / 2, -HELICOPTER_HEIGHT / 2, HELICOPTER_WIDTH, HELICOPTER_HEIGHT);
+    // Draw rocket emoji
+    ctx.font = `${config.size}px Arial`;
+    ctx.fillStyle = config.color;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(config.emoji, 0, 0);
     
-    // Draw helicopter rotor - animate based on thrust
-    ctx.fillStyle = '#333';
-    const rotorWidth = HELICOPTER_WIDTH + 10;
-    const rotorHeight = 5;
+    // Add boost effect when thrusting
     
     // Rotor animation based on game time
     const rotorOffset = isThrusting ? Math.sin(Date.now() * 0.05) * 5 : 0;
@@ -395,7 +406,12 @@ export default function Frame() {
     
     // Draw hitbox for debugging
     if (collisionDebug || process.env.NODE_ENV === 'development') {
-      const hitbox = getHelicopterHitbox();
+      const hitbox = {
+        x: heliPosition.x - (ROCKET_EMOJI_WIDTH / 2) + HITBOX_PADDING,
+        y: heliPosition.y - (ROCKET_EMOJI_HEIGHT / 2) + HITBOX_PADDING,
+        width: ROCKET_EMOJI_WIDTH - (HITBOX_PADDING * 2),
+        height: ROCKET_EMOJI_HEIGHT - (HITBOX_PADDING * 2)
+      };
       
       // Convert hitbox to local coordinates
       const localHitboxX = hitbox.x - x;
