@@ -8,7 +8,7 @@ export const size = {
   height: 800,
 };
 
-export default function Image() {
+export default async function Image() {
   const options = {
     width: 1200,
     height: 800,

@@ -8,7 +8,7 @@ export function useGameLoop(callback: GameLoopCallback, isActive: boolean = true
   
   const animate = useCallback((time: number) => {
     if (previousTimeRef.current !== undefined) {
-      const deltaTime = time - previousTimeRef.current;
+      const deltaTime = (time - previousTimeRef.current) / 1000; // Convert to seconds
       callback(deltaTime);
     }
     previousTimeRef.current = time;
