@@ -27,11 +27,15 @@ const TERMINAL_VELOCITY = 800; // absolute maximum velocity
 const ROCKET_EMOJI = '🚀';
 const ROCKET_EMOJI_WIDTH = 40;
 const ROCKET_EMOJI_HEIGHT = 40;
+const HELICOPTER_WIDTH = 40;
+const HELICOPTER_HEIGHT = 40;
 const DEFAULT_CONFIG = {
   emoji: ROCKET_EMOJI,
   color: '#FFD700',
   size: 40
 };
+const rotorWidth = 8;
+const rotorHeight = 30;
 export const config = {
   emoji: ROCKET_EMOJI,
   color: '#FFD700',
@@ -767,7 +771,7 @@ export default function Frame() {
     // Update background scroll position based on game state
     if (status === 'PLAYING') {
       // Update background scroll position with game speed
-      setBgScrollX(prevScrollX => prev => prevScrollX + BACKGROUND_SCROLL_SPEED * gameSpeed * deltaTime / 1000);
+      setBgScrollX(prevScrollX => prevScrollX + BACKGROUND_SCROLL_SPEED * gameSpeed * deltaTime / 1000);
       
       // Update helicopter physics
       updateHelicopter(deltaTime / 1000);
