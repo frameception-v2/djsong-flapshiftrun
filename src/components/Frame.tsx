@@ -30,6 +30,20 @@ const HELICOPTER_HEIGHT = 30;
 // Hitbox configuration (slightly smaller than visual size for better gameplay)
 const HITBOX_PADDING = 5; // pixels to reduce hitbox size by
 
+// Obstacle configuration
+const OBSTACLE_WIDTH = 60;
+const OBSTACLE_GAP_MIN = 130; // Minimum gap between pipes
+const OBSTACLE_GAP_MAX = 180; // Maximum gap between pipes
+const OBSTACLE_SPACING_MIN = 250; // Minimum horizontal spacing between obstacles
+const OBSTACLE_SPACING_MAX = 350; // Maximum horizontal spacing between obstacles
+const OBSTACLE_POOL_SIZE = 6; // Number of obstacles to keep in the pool
+
+// Game speed configuration
+const INITIAL_GAME_SPEED = 1.0;
+const MAX_GAME_SPEED = 1.8;
+const SPEED_INCREASE_RATE = 0.05; // How much to increase speed per 100 points
+const SPEED_INCREASE_INTERVAL = 100; // Score interval for speed increases
+
 // Collision types
 type Rect = {
   x: number;
@@ -46,6 +60,7 @@ type Obstacle = {
   bottomHeight: number;
   width: number;
   passed: boolean;
+  active: boolean; // Whether this obstacle is currently in use
 };
 
 export default function Frame() {
@@ -64,9 +79,13 @@ export default function Frame() {
   const [isThrusting, setIsThrusting] = useState(false);
   const [rotationAngle, setRotationAngle] = useState(0);
   
-  // Collision state
-  const [obstacles, setObstacles] = useState<Obstacle[]>([]);
+  // Obstacle object pool
+  const [obstaclePool, setObstaclePool] = useState<Obstacle[]>([]);
+  const [activeObstacles, setActiveObstacles] = useState<Obstacle[]>([]);
   const [collisionDebug, setCollisionDebug] = useState(false);
+  
+  // Game speed (increases as score increases)
+  const [gameSpeed, setGameSpeed] = useState(INITIAL_GAME_SPEED);
   
   // Transaction hash for potential future use
   const [txHash, setTxHash] = useState<string | null>(null);
@@ -87,7 +106,27 @@ export default function Frame() {
   // Use our canvas hook to get the canvas and context
   const { canvas, context, width, height } = useCanvas(gameContainerRef);
 
-  // Reset helicopter position when game starts
+  // Initialize obstacle pool
+  useEffect(() => {
+    if (width && height) {
+      // Create a pool of reusable obstacle objects
+      const pool: Obstacle[] = [];
+      for (let i = 0; i < OBSTACLE_POOL_SIZE; i++) {
+        pool.push({
+          x: 0,
+          topHeight: 0,
+          bottomY: 0,
+          bottomHeight: 0,
+          width: OBSTACLE_WIDTH,
+          passed: false,
+          active: false
+        });
+      }
+      setObstaclePool(pool);
+    }
+  }, [width, height]);
+
+  // Reset helicopter position and obstacles when game starts
   useEffect(() => {
     if (status === 'PLAYING' && width && height) {
       setHeliPosition({
@@ -97,9 +136,29 @@ export default function Frame() {
       setHeliVelocity(0);
       setHeliAcceleration(0);
       setRotationAngle(0);
-      setObstacles([]);
+      setGameSpeed(INITIAL_GAME_SPEED);
+      
+      // Reset all obstacles to inactive
+      setObstaclePool(prev => prev.map(obstacle => ({
+        ...obstacle,
+        active: false,
+        passed: false
+      })));
+      
+      // Clear active obstacles
+      setActiveObstacles([]);
     }
   }, [status, width, height]);
+
+  // Update game speed based on score
+  useEffect(() => {
+    if (status === 'PLAYING') {
+      // Calculate new game speed based on score
+      const speedIncrease = Math.floor(score / SPEED_INCREASE_INTERVAL) * SPEED_INCREASE_RATE;
+      const newSpeed = Math.min(INITIAL_GAME_SPEED + speedIncrease, MAX_GAME_SPEED);
+      setGameSpeed(newSpeed);
+    }
+  }, [score, status]);
 
   // Toggle collision debug mode with 'd' key
   useEffect(() => {
@@ -147,8 +206,10 @@ export default function Frame() {
     
     const heliHitbox = getHelicopterHitbox();
     
-    // Check collision with each obstacle
-    for (const obstacle of obstacles) {
+    // Check collision with each active obstacle
+    for (const obstacle of activeObstacles) {
+      if (!obstacle.active) continue;
+      
       // Top pipe hitbox
       const topPipeHitbox: Rect = {
         x: obstacle.x,
@@ -175,7 +236,7 @@ export default function Frame() {
     }
     
     return false;
-  }, [status, obstacles, getHelicopterHitbox, checkCollision]);
+  }, [status, activeObstacles, getHelicopterHitbox, checkCollision]);
 
   // Draw the scrolling background
   const drawBackground = useCallback((ctx: CanvasRenderingContext2D, w: number, h: number, scrollX: number) => {
@@ -235,14 +296,16 @@ export default function Frame() {
 
   // Draw obstacles (pipes)
   const drawObstacles = useCallback((ctx: CanvasRenderingContext2D) => {
-    if (!obstacles.length) return;
+    if (!activeObstacles.length) return;
     
     // Pipe style
     const pipeColor = '#2E8B57'; // Sea green
     const pipeBorderColor = '#1C6E44';
     const pipeCapHeight = 15;
     
-    obstacles.forEach(obstacle => {
+    activeObstacles.forEach(obstacle => {
+      if (!obstacle.active) return;
+      
       // Draw top pipe
       ctx.fillStyle = pipeColor;
       ctx.fillRect(obstacle.x, 0, obstacle.width, obstacle.topHeight);
@@ -271,7 +334,7 @@ export default function Frame() {
         ctx.strokeRect(obstacle.x, obstacle.bottomY, obstacle.width, obstacle.bottomHeight);
       }
     });
-  }, [obstacles, collisionDebug]);
+  }, [activeObstacles, collisionDebug]);
 
   // Draw the helicopter
   const drawHelicopter = useCallback((ctx: CanvasRenderingContext2D, x: number, y: number, velocity: number, rotation: number) => {
@@ -300,7 +363,7 @@ export default function Frame() {
     
     // Draw helicopter tail
     ctx.fillStyle = '#FFD700';
-    ctx.fillRect(HELICOPTER_WIDTH / 2 - 5, -HELICOPTER_HEIGHT / 4, HELICOPTER_WIDTH / 2, HELICOPTER_HEIGHT / 2);
+    ctx.fillRect(HELICOPTER_WIDTH / 2 -  5, -HELICOPTER_HEIGHT / 4, HELICOPTER_WIDTH / 2, HELICOPTER_HEIGHT / 2);
     
     // Draw helicopter window
     ctx.fillStyle = '#87CEEB';
@@ -343,14 +406,55 @@ export default function Frame() {
     ctx.restore();
   }, [isThrusting, getHelicopterHitbox, collisionDebug]);
 
+  // Get an inactive obstacle from the pool
+  const getInactiveObstacle = useCallback(() => {
+    return obstaclePool.find(obstacle => !obstacle.active);
+  }, [obstaclePool]);
+
+  // Generate a new obstacle with randomized gap
+  const generateObstacle = useCallback((startX: number) => {
+    if (!width || !height) return null;
+    
+    // Get an inactive obstacle from the pool
+    const obstacle = getInactiveObstacle();
+    if (!obstacle) return null; // No available obstacles in the pool
+    
+    // Randomize gap height and position
+    const gapHeight = Math.floor(Math.random() * (OBSTACLE_GAP_MAX - OBSTACLE_GAP_MIN)) + OBSTACLE_GAP_MIN;
+    
+    // Ensure the gap isn't too close to the top or bottom
+    const minTopHeight = 50; // Minimum height of top pipe
+    const maxTopHeight = height - GROUND_HEIGHT - gapHeight - 50; // Maximum height of top pipe
+    
+    // Calculate random top pipe height
+    const topHeight = Math.floor(Math.random() * (maxTopHeight - minTopHeight)) + minTopHeight;
+    const bottomY = topHeight + gapHeight;
+    
+    // Update the obstacle properties
+    obstacle.x = startX;
+    obstacle.topHeight = topHeight;
+    obstacle.bottomY = bottomY;
+    obstacle.bottomHeight = height - bottomY;
+    obstacle.width = OBSTACLE_WIDTH;
+    obstacle.passed = false;
+    obstacle.active = true;
+    
+    return obstacle;
+  }, [width, height, getInactiveObstacle]);
+
   // Update obstacles - move them and check if they're off screen
   const updateObstacles = useCallback((deltaTime: number) => {
     if (status !== 'PLAYING') return;
     
-    // Move obstacles based on scroll speed
-    const updatedObstacles = obstacles.map(obstacle => {
-      // Move obstacle left
-      const newX = obstacle.x - BACKGROUND_SCROLL_SPEED * deltaTime;
+    // Calculate the actual scroll speed based on game speed
+    const scrollSpeed = BACKGROUND_SCROLL_SPEED * gameSpeed;
+    
+    // Move active obstacles based on scroll speed
+    const updatedObstacles = activeObstacles.map(obstacle => {
+      if (!obstacle.active) return obstacle;
+      
+      // Move obstacle left at the synchronized speed
+      const newX = obstacle.x - scrollSpeed * deltaTime;
       
       // Check if helicopter has passed this obstacle
       let passed = obstacle.passed;
@@ -360,6 +464,12 @@ export default function Frame() {
         incrementScore(5);
       }
       
+      // Check if obstacle is off screen
+      if (newX + obstacle.width < 0) {
+        // Deactivate this obstacle so it can be reused
+        return { ...obstacle, active: false };
+      }
+      
       return {
         ...obstacle,
         x: newX,
@@ -367,38 +477,73 @@ export default function Frame() {
       };
     });
     
-    // Remove obstacles that are off screen
-    const filteredObstacles = updatedObstacles.filter(
-      obstacle => obstacle.x + obstacle.width > 0
-    );
+    // Filter out inactive obstacles
+    const filteredObstacles = updatedObstacles.filter(obstacle => obstacle.active);
     
-    // Add new obstacles if needed
-    if (filteredObstacles.length < 3) {
-      // Calculate position for new obstacle
-      const lastObstacleX = filteredObstacles.length > 0
-        ? Math.max(...filteredObstacles.map(o => o.x))
-        : width;
-      
-      // Add a new obstacle
-      const gapHeight = 150; // Height of the gap between pipes
-      const minTopHeight = 50; // Minimum height of top pipe
-      const maxTopHeight = height - GROUND_HEIGHT - gapHeight - 50; // Maximum height of top pipe
-      
-      const topHeight = Math.floor(Math.random() * (maxTopHeight - minTopHeight)) + minTopHeight;
-      const bottomY = topHeight + gapHeight;
-      
-      filteredObstacles.push({
-        x: lastObstacleX + 300, // Space obstacles 300px apart
-        topHeight,
-        bottomY,
-        bottomHeight: height - bottomY,
-        width: 60,
-        passed: false
-      });
+    // Check if we need to add new obstacles
+    let lastObstacleX = 0;
+    if (filteredObstacles.length > 0) {
+      // Find the rightmost obstacle
+      lastObstacleX = Math.max(...filteredObstacles.map(o => o.x));
+    } else if (width) {
+      // No obstacles yet, start from the right edge of the screen
+      lastObstacleX = width;
     }
     
-    setObstacles(filteredObstacles);
-  }, [status, obstacles, width, height, heliPosition, incrementScore]);
+    // Add new obstacles if needed
+    if (width && (filteredObstacles.length === 0 || lastObstacleX < width)) {
+      // Calculate position for the first new obstacle
+      const startX = filteredObstacles.length === 0 ? width + 100 : lastObstacleX;
+      
+      // Generate a new obstacle
+      const newObstacle = generateObstacle(startX);
+      
+      if (newObstacle) {
+        filteredObstacles.push(newObstacle);
+        
+        // Update the obstacle pool to mark this obstacle as active
+        setObstaclePool(prev => 
+          prev.map(o => o === newObstacle ? { ...o, active: true } : o)
+        );
+      }
+    }
+    
+    // Check if we need to add more obstacles based on spacing
+    if (width && filteredObstacles.length > 0 && filteredObstacles.length < 3) {
+      // Find the rightmost obstacle again (after potentially adding one above)
+      const updatedLastObstacleX = Math.max(...filteredObstacles.map(o => o.x));
+      
+      // Calculate random spacing between obstacles
+      // Adjust spacing based on game speed - faster game = closer obstacles
+      const spacingAdjustment = 1 - ((gameSpeed - INITIAL_GAME_SPEED) / (MAX_GAME_SPEED - INITIAL_GAME_SPEED)) * 0.3;
+      const minSpacing = OBSTACLE_SPACING_MIN * spacingAdjustment;
+      const maxSpacing = OBSTACLE_SPACING_MAX * spacingAdjustment;
+      const spacing = Math.floor(Math.random() * (maxSpacing - minSpacing)) + minSpacing;
+      
+      // Generate another obstacle with proper spacing
+      const additionalObstacle = generateObstacle(updatedLastObstacleX + spacing);
+      
+      if (additionalObstacle) {
+        filteredObstacles.push(additionalObstacle);
+        
+        // Update the obstacle pool
+        setObstaclePool(prev => 
+          prev.map(o => o === additionalObstacle ? { ...o, active: true } : o)
+        );
+      }
+    }
+    
+    // Update active obstacles state
+    setActiveObstacles(filteredObstacles);
+  }, [
+    status, 
+    activeObstacles, 
+    width, 
+    heliPosition, 
+    incrementScore, 
+    generateObstacle,
+    gameSpeed
+  ]);
 
   // Basic render function to test canvas
   const renderCanvas = useCallback(() => {
@@ -445,6 +590,14 @@ export default function Frame() {
       
       // Draw the helicopter at its current position with rotation
       drawHelicopter(context, heliPosition.x, heliPosition.y, heliVelocity, rotationAngle);
+      
+      // Draw game speed indicator in debug mode
+      if (collisionDebug || process.env.NODE_ENV === 'development') {
+        context.fillStyle = 'white';
+        context.font = '14px Arial';
+        context.textAlign = 'left';
+        context.fillText(`Speed: ${gameSpeed.toFixed(2)}x`, 20, 20);
+      }
     }
     
     // If game is in GAME_OVER state, draw game over message
@@ -493,7 +646,9 @@ export default function Frame() {
     heliPosition, 
     heliVelocity,
     rotationAngle,
-    drawHelicopter
+    drawHelicopter,
+    gameSpeed,
+    collisionDebug
   ]);
 
   // Update helicopter physics with improved velocity-based movement
@@ -566,7 +721,7 @@ export default function Frame() {
     updateObstacles(deltaTime);
     
     // Increment score based on distance traveled
-    if (Math.floor(bgScrollX / 100) !== Math.floor((bgScrollX + HORIZONTAL_SPEED * deltaTime) / 100)) {
+    if (Math.floor(bgScrollX / 100) !== Math.floor((bgScrollX + BACKGROUND_SCROLL_SPEED * gameSpeed * deltaTime) / 100)) {
       incrementScore(1);
     }
     
@@ -583,15 +738,16 @@ export default function Frame() {
     incrementScore, 
     bgScrollX, 
     checkObstacleCollisions,
-    updateObstacles
+    updateObstacles,
+    gameSpeed
   ]);
 
   // Use game loop for animation with proper delta time
   useGameLoop((deltaTime) => {
     // Update background scroll position based on game state
     if (status === 'PLAYING') {
-      // Update background scroll position
-      setBgScrollX(prevScrollX => prevScrollX + BACKGROUND_SCROLL_SPEED * deltaTime / 1000);
+      // Update background scroll position with game speed
+      setBgScrollX(prevScrollX => prevScrollX + BACKGROUND_SCROLL_SPEED *  gameSpeed * deltaTime / 1000);
       
       // Update helicopter physics
       updateHelicopter(deltaTime / 1000);
