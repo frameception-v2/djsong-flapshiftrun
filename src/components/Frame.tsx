@@ -1,9 +1,8 @@
 "use client";
 
 import { useEffect, useCallback, useState, useRef } from "react";
-import sdk, {
-  type Context,
-} from "@farcaster/frame-sdk";
+import sdk from "@farcaster/frame-sdk";
+import type { FrameContext } from "@farcaster/frame-sdk";
 import { PROJECT_TITLE } from "~/lib/constants";
 import { useGameState } from "~/hooks/useGameState";
 import { useCanvas } from "~/hooks/useCanvas";
@@ -80,7 +79,7 @@ type Obstacle = {
 
 export default function Frame() {
   const [isSDKLoaded, setIsSDKLoaded] = useState(false);
-  const [context, setContext] = useState<Context.FrameContext | undefined>();
+  const [context, setContext] = useState<FrameContext | undefined>();
   const [added, setAdded] = useState(false);
   const gameContainerRef = useRef<HTMLDivElement>(null);
   

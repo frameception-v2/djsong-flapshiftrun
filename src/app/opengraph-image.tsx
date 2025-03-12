@@ -1,5 +1,9 @@
 import { ImageResponse } from "next/og";
+import { type ReactElement } from 'react';
 import { PROJECT_TITLE, PROJECT_DESCRIPTION } from "~/lib/constants";
+
+// Force dynamic rendering for OG images
+export const dynamic = 'force-dynamic';
 
 export const alt = PROJECT_TITLE;
 export const contentType = "image/png";
