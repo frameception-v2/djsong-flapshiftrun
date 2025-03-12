@@ -4,38 +4,40 @@ import { PROJECT_TITLE, PROJECT_DESCRIPTION } from "~/lib/constants";
 
 const appUrl =
   process.env.NEXT_PUBLIC_URL ||
-  `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`;
+  process.env.VERCEL_URL ||
+  "http://localhost:3000";
 
 const frame = {
-  version: "next",
-  imageUrl: `${appUrl}/opengraph-image`,
-  button: {
-    title: "Launch Frame",
-    action: {
-      type: "launch_frame",
-      name: PROJECT_TITLE,
-      url: appUrl,
-      splashImageUrl: `${appUrl}/splash.png`,
-      splashBackgroundColor: "#f7f7f7",
-    },
-  },
+  version: "vNext",
+  image: `${appUrl}/opengraph-image`,
+  buttons: [
+    {
+      label: "Play Game",
+    }
+  ],
 };
 
-export const revalidate = 300;
-
-export async function generateMetadata(): Promise<Metadata> {
-  return {
+export const metadata: Metadata = {
+  title: PROJECT_TITLE,
+  description: PROJECT_DESCRIPTION,
+  openGraph: {
     title: PROJECT_TITLE,
-    metadataBase: new URL(appUrl),
-    openGraph: {
-      title: PROJECT_TITLE,
-      description: PROJECT_DESCRIPTION,
-    },
-    other: {
-      "fc:frame": JSON.stringify(frame),
-    },
-  };
-}
+    description: PROJECT_DESCRIPTION,
+    images: [
+      {
+        url: `${appUrl}/opengraph-image`,
+        width: 1200,
+        height: 630,
+        alt: PROJECT_TITLE,
+      },
+    ],
+  },
+  other: {
+    "fc:frame": "vNext",
+    "fc:frame:image": `${appUrl}/opengraph-image`,
+    "fc:frame:button:1": "Play Game",
+  },
+};
 
 export default function Home() {
   return <App />;

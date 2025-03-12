@@ -2,13 +2,12 @@
 
 import { useEffect, useCallback, useState, useRef } from "react";
 import sdk, {
-  AddFrame,
-  SignIn as SignInCore,
   type Context,
 } from "@farcaster/frame-sdk";
 import { PROJECT_TITLE } from "~/lib/constants";
-import { useGameState, GameStatus } from "~/hooks/useGameState";
+import { useGameState } from "~/hooks/useGameState";
 import { useCanvas } from "~/hooks/useCanvas";
+import { useGameLoop } from "~/hooks/useGameLoop";
 
 export default function Frame() {
   const [isSDKLoaded, setIsSDKLoaded] = useState(false);
@@ -111,38 +110,41 @@ export default function Frame() {
     }
   }, [context, canvas, width, height, status, score, bestScore, lastScore, hasPlayedBefore, PROJECT_TITLE]);
 
-  // Run render on each frame
-  useEffect(() => {
-    if (!context) return;
-    
+  // Use game loop for animation
+  useGameLoop((deltaTime) => {
     renderCanvas();
-  }, [context, renderCanvas, status, score]);
+  }, !!context);
 
   useEffect(() => {
     const load = async () => {
-      const context = await sdk.context;
-      if (!context) {
-        return;
+      try {
+        const ctx = await sdk.context;
+        if (!ctx) {
+          console.warn("No context available");
+          return;
+        }
+
+        setContext(ctx);
+        setAdded(ctx.client?.added || false);
+
+        // If frame isn't already added, prompt user to add it
+        if (!ctx.client?.added) {
+          addFrame();
+        }
+
+        sdk.on("frameAdded", () => {
+          setAdded(true);
+        });
+
+        sdk.on("frameRemoved", () => {
+          setAdded(false);
+        });
+
+        // Signal that the frame is ready
+        sdk.actions.ready({});
+      } catch (error) {
+        console.error("Error loading SDK context:", error);
       }
-
-      setContext(context);
-      setAdded(context.client.added);
-
-      // If frame isn't already added, prompt user to add it
-      if (!context.client.added) {
-        addFrame();
-      }
-
-      sdk.on("frameAdded", () => {
-        setAdded(true);
-      });
-
-      sdk.on("frameRemoved", () => {
-        setAdded(false);
-      });
-
-      // Signal that the frame is ready
-      sdk.actions.ready({});
     };
 
     if (sdk && !isSDKLoaded) {
@@ -210,10 +212,10 @@ export default function Frame() {
   return (
     <div
       style={{
-        paddingTop: context?.client.safeAreaInsets?.top ?? 0,
-        paddingBottom: context?.client.safeAreaInsets?.bottom ?? 0,
-        paddingLeft: context?.client.safeAreaInsets?.left ?? 0,
-        paddingRight: context?.client.safeAreaInsets?.right ?? 0,
+        paddingTop: context?.client?.safeAreaInsets?.top ?? 0,
+        paddingBottom: context?.client?.safeAreaInsets?.bottom ?? 0,
+        paddingLeft: context?.client?.safeAreaInsets?.left ?? 0,
+        paddingRight: context?.client?.safeAreaInsets?.right ?? 0,
         width: "100%",
         height: "100%",
         display: "flex",
