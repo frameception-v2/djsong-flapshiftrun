@@ -484,7 +484,7 @@ export default function Frame() {
       if (!passed && newX + obstacle.width < heliPosition.x - HELICOPTER_WIDTH / 2) {
         passed = true;
         // Increment score when passing an obstacle
-        incrementScore(5);
+        incrementScore(5); // Keep the parameter since we added optional points
       }
       
       // Check if obstacle is off screen
@@ -745,7 +745,7 @@ export default function Frame() {
     
     // Increment score based on distance traveled
     if (Math.floor(bgScrollX / 100) !== Math.floor((bgScrollX + BACKGROUND_SCROLL_SPEED * gameSpeed * deltaTime) / 100)) {
-      incrementScore(1);
+      incrementScore(1); // Keep the parameter since we added optional points
     }
     
   }, [

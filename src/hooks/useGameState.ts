@@ -11,7 +11,7 @@ interface GameState {
   startGame: () => void;
   endGame: () => void;
   restartGame: () => void;
-  incrementScore: () => void;
+  incrementScore: (points?: number) => void;
 }
 
 export function useGameState(): GameState {
@@ -78,8 +78,8 @@ export function useGameState(): GameState {
   };
 
   // Increment the score
-  const incrementScore = () => {
-    setScore(prevScore => prevScore + 1);
+  const incrementScore = (points: number = 1) => {
+    setScore(prevScore => prevScore + points);
   };
 
   return {
