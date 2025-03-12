@@ -42,3 +42,21 @@ body {
     --dvw: 1dvw;
   }
 }
+
+/* Prevent text selection */
+#game-container {
+  user-select: none;
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  touch-action: manipulation;
+}
+
+/* Prevent iOS overscroll/bounce effect */
+html, body {
+  position: fixed;
+  overflow: hidden;
+  width: 100%;
+  height: 100%;
+  touch-action: none;
+}
